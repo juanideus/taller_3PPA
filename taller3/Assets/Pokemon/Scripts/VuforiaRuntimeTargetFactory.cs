@@ -6,7 +6,7 @@ using Vuforia;
 
 namespace PokedexAR
 {
-    /// <summary>Creates the two runtime Image Targets once Vuforia is initialized.</summary>
+    /// <summary>Creates the runtime Image Targets once Vuforia is initialized.</summary>
     public sealed class VuforiaRuntimeTargetFactory : MonoBehaviour
     {
         [Serializable]
@@ -35,6 +35,11 @@ namespace PokedexAR
         [SerializeField] private InstantTarget[] targets;
         [SerializeField] private Text statusLabel;
 
+        private bool initializationFinished;
+        private VuforiaInitError initializationError = VuforiaInitError.NONE;
+        private VuforiaEngineError runtimeError;
+        private bool hasRuntimeError;
+
         public void Configure(Camera camera, InstantTarget[] instantTargets, Text status)
         {
             arCamera = camera;
@@ -45,6 +50,9 @@ namespace PokedexAR
         private void Awake()
         {
             HideDemoEnvironment();
+
+            VuforiaApplication.Instance.OnVuforiaInitialized += HandleVuforiaInitialized;
+            VuforiaApplication.Instance.OnVuforiaError += HandleVuforiaError;
 
             if (targets == null)
             {
@@ -65,25 +73,60 @@ namespace PokedexAR
                 yield break;
             }
 
-            if (arCamera.GetComponent<VuforiaBehaviour>() == null)
+            VuforiaBehaviour behaviour = arCamera.GetComponent<VuforiaBehaviour>();
+            if (behaviour == null)
             {
-                arCamera.gameObject.AddComponent<VuforiaBehaviour>();
+                behaviour = arCamera.gameObject.AddComponent<VuforiaBehaviour>();
             }
 
+            behaviour.enabled = true;
+
             SetStatus("INICIANDO CAMARA AR...");
-            float timeout = Time.realtimeSinceStartup + 20f;
-            while (!VuforiaApplication.Instance.IsInitialized && Time.realtimeSinceStartup < timeout)
+            yield return null;
+
+            // Auto-initialization can run before the first scene is ready on Android.
+            // Calling Initialize is idempotent and also recovers when that startup was skipped.
+            if (!VuforiaApplication.Instance.IsInitialized)
+            {
+                VuforiaApplication.Instance.Initialize();
+            }
+
+            float timeout = Time.realtimeSinceStartup + 30f;
+            while (!initializationFinished &&
+                   !VuforiaApplication.Instance.IsInitialized &&
+                   Time.realtimeSinceStartup < timeout)
             {
                 yield return null;
             }
 
-            if (!VuforiaApplication.Instance.IsInitialized || VuforiaBehaviour.Instance == null)
+            if (initializationError != VuforiaInitError.NONE)
             {
-                SetStatus("AGREGA LA CLAVE EN VUFORIA CONFIGURATION");
+                SetStatus(GetInitializationErrorMessage(initializationError));
+                yield break;
+            }
+
+            if (!VuforiaApplication.Instance.IsInitialized)
+            {
+                SetStatus("NO SE PUDO INICIAR AR. REVISA CAMARA E INTERNET");
+                yield break;
+            }
+
+            float runningTimeout = Time.realtimeSinceStartup + 10f;
+            while (!VuforiaApplication.Instance.IsRunning && Time.realtimeSinceStartup < runningTimeout)
+            {
+                yield return null;
+            }
+
+            if (!VuforiaApplication.Instance.IsRunning || VuforiaBehaviour.Instance == null)
+            {
+                SetStatus(hasRuntimeError
+                    ? $"ERROR VUFORIA: {runtimeError}"
+                    : "NO SE PUDO ABRIR LA CAMARA AR");
                 yield break;
             }
 
             ObserverFactory factory = VuforiaBehaviour.Instance.ObserverFactory;
+            int createdTargetCount = 0;
             foreach (InstantTarget target in targets)
             {
                 if (target.content == null)
@@ -92,32 +135,87 @@ namespace PokedexAR
                 }
 
                 ImageTargetBehaviour observer;
-                if (!string.IsNullOrWhiteSpace(target.databaseName) &&
-                    !string.IsNullOrWhiteSpace(target.databaseTargetName))
-                {
-                    observer = factory.CreateImageTarget(target.databaseName, target.databaseTargetName);
-                }
-                else if (target.image != null)
+                // Instant targets proved more reliable across Android devices. The source
+                // textures are the exact images exported with the taller_3 database.
+                if (target.image != null)
                 {
                     observer = factory.CreateImageTarget(target.image, target.physicalWidth, target.content.name);
+                }
+                else if (!string.IsNullOrWhiteSpace(target.databaseName) &&
+                         !string.IsNullOrWhiteSpace(target.databaseTargetName))
+                {
+                    observer = factory.CreateImageTarget(target.databaseName, target.databaseTargetName);
                 }
                 else
                 {
                     continue;
                 }
 
+                if (observer == null)
+                {
+                    SetStatus($"NO SE PUDO CARGAR TARGET {target.databaseTargetName}");
+                    continue;
+                }
+
                 target.content.transform.SetParent(observer.transform, false);
-                target.content.transform.localPosition = Vector3.up * 0.004f;
+                target.content.transform.localPosition = Vector3.up * 0.01f;
                 // Runtime Image Targets lie on XZ. Rotate the normalized Pokemon so its
                 // vertical axis follows the printed card and its front faces the camera.
                 target.content.transform.localRotation = Quaternion.Euler(90f, 0f, 0f);
                 target.content.transform.localScale = Vector3.one * Mathf.Max(0.001f, target.contentScale);
 
                 VuforiaTargetStatusBridge bridge = observer.gameObject.AddComponent<VuforiaTargetStatusBridge>();
-                bridge.Configure(observer, target.content);
+                string targetName = string.IsNullOrWhiteSpace(target.databaseTargetName)
+                    ? target.content.name
+                    : target.databaseTargetName;
+                bridge.Configure(observer, target.content, targetName, SetStatus);
+                createdTargetCount++;
             }
 
-            SetStatus("APUNTA A UNA DE LAS DOS CARTAS");
+            SetStatus(createdTargetCount > 0
+                ? "APUNTA A UNA DE LAS TRES CARTAS"
+                : "NO SE CARGARON LOS TARGETS DE TALLER_3");
+        }
+
+        private void OnDestroy()
+        {
+            if (VuforiaApplication.Instance == null)
+            {
+                return;
+            }
+
+            VuforiaApplication.Instance.OnVuforiaInitialized -= HandleVuforiaInitialized;
+            VuforiaApplication.Instance.OnVuforiaError -= HandleVuforiaError;
+        }
+
+        private void HandleVuforiaInitialized(VuforiaInitError error)
+        {
+            initializationError = error;
+            initializationFinished = true;
+        }
+
+        private void HandleVuforiaError(VuforiaEngineError error)
+        {
+            runtimeError = error;
+            hasRuntimeError = true;
+            SetStatus($"ERROR VUFORIA: {error}");
+        }
+
+        private static string GetInitializationErrorMessage(VuforiaInitError error)
+        {
+            switch (error)
+            {
+                case VuforiaInitError.PERMISSION_ERROR:
+                    return "ACTIVA EL PERMISO DE CAMARA EN AJUSTES";
+                case VuforiaInitError.LICENSE_CONFIG_MISSING_KEY:
+                case VuforiaInitError.LICENSE_CONFIG_INVALID_KEY:
+                case VuforiaInitError.LICENSE_ERROR:
+                    return "REVISA LA LICENCIA DE VUFORIA";
+                case VuforiaInitError.DEVICE_NOT_SUPPORTED:
+                    return "ESTE TELEFONO NO ES COMPATIBLE CON VUFORIA";
+                default:
+                    return $"ERROR AL INICIAR VUFORIA: {error}";
+            }
         }
 
         private void SetStatus(string message)
@@ -144,39 +242,98 @@ namespace PokedexAR
                     gridLine.SetActive(false);
                 }
             }
+
+            GameObject selector = GameObject.Find("Target Selector");
+            if (selector != null)
+            {
+                selector.SetActive(false);
+            }
         }
     }
 
     /// <summary>Forwards Vuforia tracking changes to the Pokemon presentation.</summary>
     public sealed class VuforiaTargetStatusBridge : MonoBehaviour
     {
+        private static VuforiaTargetStatusBridge activeBridge;
+
         private ObserverBehaviour observer;
         private PokemonTargetController target;
+        private string targetName;
+        private Action<string> setStatus;
         private bool previousTracked;
 
-        public void Configure(ObserverBehaviour observerBehaviour, PokemonTargetController targetController)
+        public void Configure(
+            ObserverBehaviour observerBehaviour,
+            PokemonTargetController targetController,
+            string observerName,
+            Action<string> statusCallback)
         {
             observer = observerBehaviour;
             target = targetController;
+            targetName = observerName;
+            setStatus = statusCallback;
+
+            observer.OnTargetStatusChanged += HandleTargetStatusChanged;
+            ApplyStatus(observer.TargetStatus);
         }
 
-        private void Update()
+        private void OnDestroy()
         {
-            if (observer == null || target == null)
+            if (observer != null)
+            {
+                observer.OnTargetStatusChanged -= HandleTargetStatusChanged;
+            }
+
+            if (activeBridge == this)
+            {
+                activeBridge = null;
+            }
+        }
+
+        private void HandleTargetStatusChanged(ObserverBehaviour behaviour, TargetStatus targetStatus)
+        {
+            ApplyStatus(targetStatus);
+        }
+
+        private void ApplyStatus(TargetStatus targetStatus)
+        {
+            if (target == null)
             {
                 return;
             }
 
-            Status status = observer.TargetStatus.Status;
-            // Keep the model visible only while the printed card itself is detected.
+            Status status = targetStatus.Status;
             bool tracked = status == Status.TRACKED;
             if (tracked == previousTracked)
             {
                 return;
             }
 
-            previousTracked = tracked;
-            target.SetTracked(tracked);
+            if (tracked)
+            {
+                if (activeBridge != null && activeBridge != this)
+                {
+                    activeBridge.ForceHide();
+                }
+
+                activeBridge = this;
+                previousTracked = true;
+                target.SetTracked(true);
+                setStatus?.Invoke($"TARGET {targetName.ToUpperInvariant()} DETECTADO");
+                return;
+            }
+
+            ForceHide();
+            if (activeBridge == this)
+            {
+                activeBridge = null;
+            }
+        }
+
+        private void ForceHide()
+        {
+            previousTracked = false;
+            target?.SetTracked(false);
         }
     }
 }

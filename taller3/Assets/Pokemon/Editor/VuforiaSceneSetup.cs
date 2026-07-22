@@ -32,13 +32,14 @@ namespace PokedexAR.Editor
             {
                 var serializedFactory = new SerializedObject(targetFactory);
                 SerializedProperty targets = serializedFactory.FindProperty("targets");
-                ConfigureTextureTarget(targets, 0);
-                ConfigureTextureTarget(targets, 1);
+                ConfigureDatabaseTarget(targets, 0, "rati");
+                ConfigureDatabaseTarget(targets, 1, "greninja");
+                ConfigureDatabaseTarget(targets, 2, "abra");
                 serializedFactory.ApplyModifiedPropertiesWithoutUndo();
             }
 
             VuforiaConfiguration configuration = VuforiaConfiguration.Instance;
-            configuration.Vuforia.MaxSimultaneousImageTargets = 2;
+            configuration.Vuforia.MaxSimultaneousImageTargets = 3;
             if (!EditorUtility.IsPersistent(configuration))
             {
                 if (!AssetDatabase.IsValidFolder("Assets/Resources"))
@@ -56,7 +57,7 @@ namespace PokedexAR.Editor
             Debug.Log("POKEDEX_VUFORIA_READY: escena y configuracion preparadas; falta App License Key.");
         }
 
-        private static void ConfigureTextureTarget(SerializedProperty targets, int index)
+        private static void ConfigureDatabaseTarget(SerializedProperty targets, int index, string targetName)
         {
             if (targets == null || index >= targets.arraySize)
             {
@@ -64,8 +65,8 @@ namespace PokedexAR.Editor
             }
 
             SerializedProperty target = targets.GetArrayElementAtIndex(index);
-            target.FindPropertyRelative("databaseName").stringValue = string.Empty;
-            target.FindPropertyRelative("databaseTargetName").stringValue = string.Empty;
+            target.FindPropertyRelative("databaseName").stringValue = "taller_3";
+            target.FindPropertyRelative("databaseTargetName").stringValue = targetName;
         }
     }
 }

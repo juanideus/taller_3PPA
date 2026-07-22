@@ -21,6 +21,9 @@ namespace PokedexAR
         [SerializeField, Tooltip("Whether this target is available before a Vuforia tracking event.")]
         private bool simulateTracking = true;
 
+        [SerializeField, Tooltip("Evolution stage selected when the target is first detected.")]
+        private int initialStageIndex;
+
         private AudioSource audioSource;
         private int currentStageIndex;
         private bool isTracked;
@@ -36,12 +39,15 @@ namespace PokedexAR
             PokemonStage[] stages,
             PokedexPanelController panel,
             GameObject cardPreview,
-            bool enableSimulation)
+            bool enableSimulation,
+            int firstStageIndex = 0)
         {
             evolutionStages = stages;
             pokedexPanel = panel;
             previewSurface = cardPreview;
             simulateTracking = enableSimulation;
+            initialStageIndex = firstStageIndex;
+            currentStageIndex = Mathf.Clamp(firstStageIndex, 0, stages.Length - 1);
         }
 
         private void Awake()
@@ -49,6 +55,10 @@ namespace PokedexAR
             audioSource = GetComponent<AudioSource>();
             audioSource.playOnAwake = false;
             audioSource.spatialBlend = 0.15f;
+            if (evolutionStages != null && evolutionStages.Length > 0)
+            {
+                currentStageIndex = Mathf.Clamp(initialStageIndex, 0, evolutionStages.Length - 1);
+            }
             isTracked = simulateTracking;
             ApplyStage(false);
         }

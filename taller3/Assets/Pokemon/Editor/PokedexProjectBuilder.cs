@@ -28,6 +28,9 @@ namespace PokedexAR.Editor
         {
             ConfigureTargetTexture("Assets/Pokemon/Targets/AbraTarget.png");
             ConfigureTargetTexture("Assets/Pokemon/Targets/FroakieTarget.png");
+            ConfigureTargetTexture("Assets/Editor/Vuforia/ImageTargetTextures/taller_3/abra_scaled.jpg");
+            ConfigureTargetTexture("Assets/Editor/Vuforia/ImageTargetTextures/taller_3/greninja_scaled.jpg");
+            ConfigureTargetTexture("Assets/Editor/Vuforia/ImageTargetTextures/taller_3/rati_scaled.jpg");
             AssetDatabase.Refresh(ImportAssetOptions.ForceSynchronousImport);
 
             Scene scene = EditorSceneManager.NewScene(NewSceneSetup.EmptyScene, NewSceneMode.Single);
@@ -38,7 +41,7 @@ namespace PokedexAR.Editor
             PokemonTargetController psychicTarget = CreatePokemonTarget(
                 "AbraLine",
                 new Vector3(-0.72f, 0.12f, -0.35f),
-                "Assets/Pokemon/Targets/AbraTarget.png",
+                "Assets/Editor/Vuforia/ImageTargetTextures/taller_3/abra_scaled.jpg",
                 new[]
                 {
                     Stage("Abra", "Psíquico", "Percibe el peligro y se teletransporta incluso mientras duerme.", "Assets/Pokemon/Models/Abra/Abra.FBX", new Color32(246, 191, 62, 255), 1.04f),
@@ -50,15 +53,28 @@ namespace PokedexAR.Editor
             PokemonTargetController waterTarget = CreatePokemonTarget(
                 "FroakieLine",
                 new Vector3(0.72f, 0.12f, -0.35f),
-                "Assets/Pokemon/Targets/FroakieTarget.png",
+                "Assets/Editor/Vuforia/ImageTargetTextures/taller_3/greninja_scaled.jpg",
                 new[]
                 {
                     Stage("Froakie", "Agua", "Sus burbujas elásticas amortiguan ataques y le permiten moverse con agilidad.", "Assets/Pokemon/Models/Froakie/Froakie.FBX", new Color32(66, 188, 222, 255), 0.92f),
                     Stage("Frogadier", "Agua", "Lanza piedras envueltas en burbujas con una precisión extraordinaria.", "Assets/Pokemon/Models/Frogadier/Frogadier.FBX", new Color32(47, 138, 205, 255), 1.03f),
                     Stage("Greninja", "Agua / Siniestro", "Crea estrellas arrojadizas de agua capaces de cortar materiales resistentes.", "Assets/Pokemon/Models/Greninja/Greninja.FBX", new Color32(37, 78, 145, 255), 1.15f)
                 },
+                panel,
+                2);
+
+            PokemonTargetController normalTarget = CreatePokemonTarget(
+                "RattataLine",
+                new Vector3(0f, 0.12f, 0.45f),
+                "Assets/Editor/Vuforia/ImageTargetTextures/taller_3/rati_scaled.jpg",
+                new[]
+                {
+                    Stage("Rattata", "Normal", "Roe todo lo que encuentra y puede sobrevivir en casi cualquier lugar.", "Assets/Pokemon/Models/Rattata/Rattata_M.FBX", new Color32(157, 104, 184, 255), 1.08f),
+                    Stage("Raticate", "Normal", "Usa sus fuertes incisivos para derribar obstaculos y defender su territorio.", "Assets/Pokemon/Models/Raticate/Raticate_M.FBX", new Color32(191, 142, 76, 255), 0.94f)
+                },
                 panel);
 
+            CreateSelectorButton(selectorRow, "NORMAL", new Color32(113, 101, 128, 255), normalTarget);
             CreateSelectorButton(selectorRow, "PSÍQUICO", new Color32(119, 62, 143, 255), psychicTarget);
             CreateSelectorButton(selectorRow, "AGUA", new Color32(27, 129, 170, 255), waterTarget);
 
@@ -71,15 +87,30 @@ namespace PokedexAR.Editor
             {
                 new VuforiaRuntimeTargetFactory.InstantTarget
                 {
-                    image = AssetDatabase.LoadAssetAtPath<Texture2D>("Assets/Pokemon/Targets/AbraTarget.png"),
+                    databaseName = "taller_3",
+                    databaseTargetName = "rati",
+                    image = AssetDatabase.LoadAssetAtPath<Texture2D>("Assets/Editor/Vuforia/ImageTargetTextures/taller_3/rati_scaled.jpg"),
                     physicalWidth = 0.12f,
-                    content = psychicTarget
+                    contentScale = 0.06f,
+                    content = normalTarget
                 },
                 new VuforiaRuntimeTargetFactory.InstantTarget
                 {
-                    image = AssetDatabase.LoadAssetAtPath<Texture2D>("Assets/Pokemon/Targets/FroakieTarget.png"),
+                    databaseName = "taller_3",
+                    databaseTargetName = "greninja",
+                    image = AssetDatabase.LoadAssetAtPath<Texture2D>("Assets/Editor/Vuforia/ImageTargetTextures/taller_3/greninja_scaled.jpg"),
                     physicalWidth = 0.12f,
+                    contentScale = 0.06f,
                     content = waterTarget
+                },
+                new VuforiaRuntimeTargetFactory.InstantTarget
+                {
+                    databaseName = "taller_3",
+                    databaseTargetName = "abra",
+                    image = AssetDatabase.LoadAssetAtPath<Texture2D>("Assets/Editor/Vuforia/ImageTargetTextures/taller_3/abra_scaled.jpg"),
+                    physicalWidth = 0.12f,
+                    contentScale = 0.06f,
+                    content = psychicTarget
                 }
             }, statusLabel);
 
@@ -281,7 +312,8 @@ namespace PokedexAR.Editor
             Vector3 position,
             string targetTexturePath,
             PokemonStageDefinition[] definitions,
-            PokedexPanelController panel)
+            PokedexPanelController panel,
+            int initialStageIndex = 0)
         {
             GameObject targetRoot = new GameObject(name);
             targetRoot.transform.position = position;
@@ -321,7 +353,7 @@ namespace PokedexAR.Editor
                 BoxCollider collider = stageObject.AddComponent<BoxCollider>();
                 collider.center = new Vector3(0f, 0.72f, 0f);
                 collider.size = new Vector3(1.25f, 1.55f, 1.25f);
-                stageObject.SetActive(index == 0);
+                stageObject.SetActive(index == initialStageIndex);
                 stages.Add(new PokemonStage
                 {
                     displayName = definition.displayName,
@@ -334,7 +366,7 @@ namespace PokedexAR.Editor
             }
 
             PokemonTargetController controller = targetRoot.AddComponent<PokemonTargetController>();
-            controller.Configure(stages.ToArray(), panel, card, true);
+            controller.Configure(stages.ToArray(), panel, card, true, initialStageIndex);
             return controller;
         }
 
