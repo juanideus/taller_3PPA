@@ -32,8 +32,8 @@ namespace PokedexAR.Editor
             {
                 var serializedFactory = new SerializedObject(targetFactory);
                 SerializedProperty targets = serializedFactory.FindProperty("targets");
-                ConfigureDatabaseTarget(targets, 0, "abra");
-                ConfigureDatabaseTarget(targets, 1, "mewto");
+                ConfigureTextureTarget(targets, 0);
+                ConfigureTextureTarget(targets, 1);
                 serializedFactory.ApplyModifiedPropertiesWithoutUndo();
             }
 
@@ -56,7 +56,7 @@ namespace PokedexAR.Editor
             Debug.Log("POKEDEX_VUFORIA_READY: escena y configuracion preparadas; falta App License Key.");
         }
 
-        private static void ConfigureDatabaseTarget(SerializedProperty targets, int index, string targetName)
+        private static void ConfigureTextureTarget(SerializedProperty targets, int index)
         {
             if (targets == null || index >= targets.arraySize)
             {
@@ -64,8 +64,8 @@ namespace PokedexAR.Editor
             }
 
             SerializedProperty target = targets.GetArrayElementAtIndex(index);
-            target.FindPropertyRelative("databaseName").stringValue = "taller_3";
-            target.FindPropertyRelative("databaseTargetName").stringValue = targetName;
+            target.FindPropertyRelative("databaseName").stringValue = string.Empty;
+            target.FindPropertyRelative("databaseTargetName").stringValue = string.Empty;
         }
     }
 }

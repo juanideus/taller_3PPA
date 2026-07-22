@@ -39,6 +39,19 @@ namespace PokedexAR
             statusLabel = status;
         }
 
+        private void Awake()
+        {
+            if (targets == null)
+            {
+                return;
+            }
+
+            foreach (InstantTarget target in targets)
+            {
+                target.content?.EnableVuforiaMode();
+            }
+        }
+
         private IEnumerator Start()
         {
             if (arCamera == null || targets == null || targets.Length == 0)
@@ -88,7 +101,6 @@ namespace PokedexAR
                     continue;
                 }
 
-                target.content.EnableVuforiaMode();
                 target.content.transform.SetParent(observer.transform, false);
                 target.content.transform.localPosition = Vector3.zero;
                 target.content.transform.localRotation = Quaternion.identity;
@@ -130,7 +142,8 @@ namespace PokedexAR
             }
 
             Status status = observer.TargetStatus.Status;
-            bool tracked = status == Status.TRACKED || status == Status.EXTENDED_TRACKED || status == Status.LIMITED;
+            // Keep the model visible only while the printed card itself is detected.
+            bool tracked = status == Status.TRACKED;
             if (tracked == previousTracked)
             {
                 return;
