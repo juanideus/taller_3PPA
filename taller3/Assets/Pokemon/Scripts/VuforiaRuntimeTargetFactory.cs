@@ -24,6 +24,9 @@ namespace PokedexAR
             [Tooltip("Real-world printed width of the target in metres.")]
             public float physicalWidth = 0.12f;
 
+            [Tooltip("Scale applied to the normalized model so it fits on the physical card.")]
+            public float contentScale = 0.075f;
+
             [Tooltip("Pokemon evolution content attached to the detected target.")]
             public PokemonTargetController content;
         }
@@ -41,6 +44,8 @@ namespace PokedexAR
 
         private void Awake()
         {
+            HideDemoEnvironment();
+
             if (targets == null)
             {
                 return;
@@ -102,8 +107,9 @@ namespace PokedexAR
                 }
 
                 target.content.transform.SetParent(observer.transform, false);
-                target.content.transform.localPosition = Vector3.zero;
+                target.content.transform.localPosition = Vector3.up * 0.004f;
                 target.content.transform.localRotation = Quaternion.identity;
+                target.content.transform.localScale = Vector3.one * Mathf.Max(0.001f, target.contentScale);
 
                 VuforiaTargetStatusBridge bridge = observer.gameObject.AddComponent<VuforiaTargetStatusBridge>();
                 bridge.Configure(observer, target.content);
@@ -117,6 +123,24 @@ namespace PokedexAR
             if (statusLabel != null)
             {
                 statusLabel.text = message;
+            }
+        }
+
+        private static void HideDemoEnvironment()
+        {
+            GameObject demoSurface = GameObject.Find("Demo Surface");
+            if (demoSurface != null)
+            {
+                demoSurface.SetActive(false);
+            }
+
+            for (int index = 1; index <= 7; index++)
+            {
+                GameObject gridLine = GameObject.Find($"Grid Line {index}");
+                if (gridLine != null)
+                {
+                    gridLine.SetActive(false);
+                }
             }
         }
     }
