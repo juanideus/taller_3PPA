@@ -108,7 +108,9 @@ namespace PokedexAR
 
                 target.content.transform.SetParent(observer.transform, false);
                 target.content.transform.localPosition = Vector3.up * 0.004f;
-                target.content.transform.localRotation = Quaternion.identity;
+                // Runtime Image Targets lie on XZ. Rotate the normalized Pokemon so its
+                // vertical axis follows the printed card and its front faces the camera.
+                target.content.transform.localRotation = Quaternion.Euler(90f, 0f, 0f);
                 target.content.transform.localScale = Vector3.one * Mathf.Max(0.001f, target.contentScale);
 
                 VuforiaTargetStatusBridge bridge = observer.gameObject.AddComponent<VuforiaTargetStatusBridge>();
