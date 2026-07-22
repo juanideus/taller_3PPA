@@ -1,40 +1,38 @@
 using System;
 using System.Collections;
-using System.Reflection;
 using UnityEngine;
+using UnityEngine.UI;
+using Vuforia;
 
 namespace PokedexAR
 {
-    /// <summary>
-    /// Creates Vuforia 11 instant Image Targets through reflection when the optional SDK is present.
-    /// The project therefore remains compilable before the account-bound Vuforia package is imported.
-    /// </summary>
+    /// <summary>Creates the two runtime Image Targets once Vuforia is initialized.</summary>
     public sealed class VuforiaRuntimeTargetFactory : MonoBehaviour
     {
         [Serializable]
         public sealed class InstantTarget
         {
-            [Tooltip("Readable texture used by Vuforia as an instant Image Target.")]
+            [Tooltip("Vuforia device database name. Leave empty to use the texture directly.")]
+            public string databaseName;
+
+            [Tooltip("Image Target name inside the Vuforia database.")]
+            public string databaseTargetName;
+
+            [Tooltip("Readable image used by Vuforia as an Image Target.")]
             public Texture2D image;
 
             [Tooltip("Real-world printed width of the target in metres.")]
             public float physicalWidth = 0.12f;
 
-            [Tooltip("Evolution content that is parented to the detected target.")]
+            [Tooltip("Pokemon evolution content attached to the detected target.")]
             public PokemonTargetController content;
         }
 
-        [SerializeField, Tooltip("AR camera that receives VuforiaBehaviour when the SDK is installed.")]
-        private Camera arCamera;
+        [SerializeField] private Camera arCamera;
+        [SerializeField] private InstantTarget[] targets;
+        [SerializeField] private Text statusLabel;
 
-        [SerializeField, Tooltip("Two printable targets and their evolution content.")]
-        private InstantTarget[] targets;
-
-        [SerializeField, Tooltip("Status label that explains whether live tracking or preview mode is active.")]
-        private UnityEngine.UI.Text statusLabel;
-
-        /// <summary>Assigns target textures and their corresponding content roots.</summary>
-        public void Configure(Camera camera, InstantTarget[] instantTargets, UnityEngine.UI.Text status)
+        public void Configure(Camera camera, InstantTarget[] instantTargets, Text status)
         {
             arCamera = camera;
             targets = instantTargets;
@@ -43,129 +41,103 @@ namespace PokedexAR
 
         private IEnumerator Start()
         {
-            Type vuforiaBehaviourType = FindType("Vuforia.VuforiaBehaviour");
-            if (vuforiaBehaviourType == null)
+            if (arCamera == null || targets == null || targets.Length == 0)
             {
-                statusLabel.text = "MODO DEMO  |  Instala Vuforia 11.4.4 para seguimiento AR";
+                SetStatus("CONFIGURACION AR INCOMPLETA");
                 yield break;
             }
 
-            Component behaviour = arCamera.GetComponent(vuforiaBehaviourType);
-            if (behaviour == null)
+            if (arCamera.GetComponent<VuforiaBehaviour>() == null)
             {
-                behaviour = arCamera.gameObject.AddComponent(vuforiaBehaviourType);
+                arCamera.gameObject.AddComponent<VuforiaBehaviour>();
             }
 
-            statusLabel.text = "INICIANDO CÁMARA AR...";
-            object instance = null;
-            object observerFactory = null;
-            float timeout = Time.realtimeSinceStartup + 12f;
-
-            while (observerFactory == null && Time.realtimeSinceStartup < timeout)
+            SetStatus("INICIANDO CAMARA AR...");
+            float timeout = Time.realtimeSinceStartup + 20f;
+            while (!VuforiaApplication.Instance.IsInitialized && Time.realtimeSinceStartup < timeout)
             {
-                PropertyInfo instanceProperty = vuforiaBehaviourType.GetProperty("Instance", BindingFlags.Public | BindingFlags.Static);
-                instance = instanceProperty?.GetValue(null);
-                observerFactory = instance?.GetType().GetProperty("ObserverFactory")?.GetValue(instance);
-                yield return new WaitForSecondsRealtime(0.25f);
+                yield return null;
             }
 
-            if (observerFactory == null)
+            if (!VuforiaApplication.Instance.IsInitialized || VuforiaBehaviour.Instance == null)
             {
-                statusLabel.text = "Vuforia requiere una clave de licencia válida";
+                SetStatus("AGREGA LA CLAVE EN VUFORIA CONFIGURATION");
                 yield break;
             }
 
-            MethodInfo createTarget = FindTextureTargetMethod(observerFactory.GetType());
-            if (createTarget == null)
-            {
-                statusLabel.text = "La versión instalada de Vuforia no admite Instant Targets";
-                yield break;
-            }
-
+            ObserverFactory factory = VuforiaBehaviour.Instance.ObserverFactory;
             foreach (InstantTarget target in targets)
             {
-                object observer = createTarget.Invoke(observerFactory, new object[]
+                if (target.content == null)
                 {
-                    target.image,
-                    target.physicalWidth,
-                    target.content.name
-                });
-
-                if (observer is Component observerComponent)
-                {
-                    target.content.EnableVuforiaMode();
-                    target.content.transform.SetParent(observerComponent.transform, false);
-                    target.content.transform.localPosition = Vector3.zero;
-                    target.content.transform.localRotation = Quaternion.identity;
-                    VuforiaTargetStatusBridge bridge = observerComponent.gameObject.AddComponent<VuforiaTargetStatusBridge>();
-                    bridge.Configure(observerComponent, target.content);
+                    continue;
                 }
+
+                ImageTargetBehaviour observer;
+                if (!string.IsNullOrWhiteSpace(target.databaseName) &&
+                    !string.IsNullOrWhiteSpace(target.databaseTargetName))
+                {
+                    observer = factory.CreateImageTarget(target.databaseName, target.databaseTargetName);
+                }
+                else if (target.image != null)
+                {
+                    observer = factory.CreateImageTarget(target.image, target.physicalWidth, target.content.name);
+                }
+                else
+                {
+                    continue;
+                }
+
+                target.content.EnableVuforiaMode();
+                target.content.transform.SetParent(observer.transform, false);
+                target.content.transform.localPosition = Vector3.zero;
+                target.content.transform.localRotation = Quaternion.identity;
+
+                VuforiaTargetStatusBridge bridge = observer.gameObject.AddComponent<VuforiaTargetStatusBridge>();
+                bridge.Configure(observer, target.content);
             }
 
-            statusLabel.text = "APUNTA A UNA DE LAS DOS CARTAS";
+            SetStatus("APUNTA A UNA DE LAS DOS CARTAS");
         }
 
-        private static MethodInfo FindTextureTargetMethod(Type factoryType)
+        private void SetStatus(string message)
         {
-            foreach (MethodInfo method in factoryType.GetMethods(BindingFlags.Public | BindingFlags.Instance))
+            if (statusLabel != null)
             {
-                ParameterInfo[] parameters = method.GetParameters();
-                if (method.Name == "CreateImageTarget" &&
-                    parameters.Length == 3 &&
-                    parameters[0].ParameterType == typeof(Texture2D) &&
-                    parameters[1].ParameterType == typeof(float) &&
-                    parameters[2].ParameterType == typeof(string))
-                {
-                    return method;
-                }
+                statusLabel.text = message;
             }
-
-            return null;
-        }
-
-        private static Type FindType(string fullName)
-        {
-            foreach (Assembly assembly in AppDomain.CurrentDomain.GetAssemblies())
-            {
-                Type type = assembly.GetType(fullName);
-                if (type != null)
-                {
-                    return type;
-                }
-            }
-
-            return null;
         }
     }
 
-    /// <summary>Polls a reflected Vuforia observer and forwards its tracked state to gameplay.</summary>
+    /// <summary>Forwards Vuforia tracking changes to the Pokemon presentation.</summary>
     public sealed class VuforiaTargetStatusBridge : MonoBehaviour
     {
-        private Component observer;
+        private ObserverBehaviour observer;
         private PokemonTargetController target;
-        private PropertyInfo targetStatusProperty;
         private bool previousTracked;
 
-        /// <summary>Connects a Vuforia observer component with its Pokemon content.</summary>
-        public void Configure(Component observerComponent, PokemonTargetController targetController)
+        public void Configure(ObserverBehaviour observerBehaviour, PokemonTargetController targetController)
         {
-            observer = observerComponent;
+            observer = observerBehaviour;
             target = targetController;
-            targetStatusProperty = observer.GetType().GetProperty("TargetStatus");
         }
 
         private void Update()
         {
-            object targetStatus = targetStatusProperty?.GetValue(observer);
-            object status = targetStatus?.GetType().GetProperty("Status")?.GetValue(targetStatus);
-            string statusName = status?.ToString() ?? string.Empty;
-            bool tracked = statusName == "TRACKED" || statusName == "EXTENDED_TRACKED" || statusName == "LIMITED";
-
-            if (tracked != previousTracked)
+            if (observer == null || target == null)
             {
-                previousTracked = tracked;
-                target.SetTracked(tracked);
+                return;
             }
+
+            Status status = observer.TargetStatus.Status;
+            bool tracked = status == Status.TRACKED || status == Status.EXTENDED_TRACKED || status == Status.LIMITED;
+            if (tracked == previousTracked)
+            {
+                return;
+            }
+
+            previousTracked = tracked;
+            target.SetTracked(tracked);
         }
     }
 }

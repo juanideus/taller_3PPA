@@ -38,6 +38,10 @@ sysinfo.txt
 crashlytics-build.properties
 ~UnityDirMonSyncFile~*
 
+# Local Vuforia license (never commit account-bound keys)
+taller3/Assets/Resources/VuforiaConfiguration.asset
+taller3/Assets/Resources/VuforiaConfiguration.asset.meta
+
 # OS metadata
 .DS_Store
 Thumbs.db

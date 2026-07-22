@@ -96,6 +96,7 @@ namespace PokedexAR.Editor
         public static void BuildAndroid()
         {
             BuildProject();
+            VuforiaSceneSetup.PrepareProject();
             Directory.CreateDirectory(Path.Combine(Directory.GetCurrentDirectory(), "Builds"));
             BuildPlayerOptions options = new BuildPlayerOptions
             {
@@ -428,9 +429,9 @@ namespace PokedexAR.Editor
             PlayerSettings.allowedAutorotateToPortrait = true;
             PlayerSettings.allowedAutorotateToPortraitUpsideDown = false;
             PlayerSettings.SetApplicationIdentifier(BuildTargetGroup.Android, "cl.ucn.juanzuniga.pokedexar");
-            PlayerSettings.Android.minSdkVersion = AndroidSdkVersions.AndroidApiLevel26;
+            PlayerSettings.Android.minSdkVersion = AndroidSdkVersions.AndroidApiLevel29;
             PlayerSettings.SetScriptingBackend(BuildTargetGroup.Android, ScriptingImplementation.IL2CPP);
-            PlayerSettings.Android.targetArchitectures = AndroidArchitecture.ARMv7 | AndroidArchitecture.ARM64;
+            PlayerSettings.Android.targetArchitectures = AndroidArchitecture.ARM64;
             PlayerSettings.Android.bundleVersionCode = 1;
             PlayerSettings.Android.forceInternetPermission = false;
             PlayerSettings.statusBarHidden = true;
